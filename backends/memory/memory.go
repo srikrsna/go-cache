@@ -2,13 +2,16 @@ package memory
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"reflect"
 	"sync"
 	"time"
 
 	"github.com/srikrsna/go-cache"
 )
+
+// ErrNotPtr is returned by Get
+var ErrNotPtr = errors.New("can only use pointers")
 
 // Cache implements an in memory object cache
 type Cache struct {
@@ -32,7 +35,7 @@ func NewCache() *Cache {
 func (c *Cache) Get(ctx context.Context, key string, v interface{}, d time.Duration) error {
 	val := reflect.ValueOf(v)
 	if val.Kind() != reflect.Ptr {
-		return fmt.Errorf("'v' should be a pointer, but it is a %v", val.Kind())
+		return ErrNotPtr
 	}
 
 	c.Lock()

@@ -14,7 +14,9 @@ func TestCache(t *testing.T) {
 }
 
 func TestPointerInput(t *testing.T) {
-	if memory.NewCache().Get(context.Background(), "random", 1234, time.Second) == nil {
+	c := memory.NewCache()
+	c.Set(context.Background(), "random", 1234, time.Second)
+	if memory.NewCache().Get(context.Background(), "random", 1234, time.Second) != memory.ErrNotPtr {
 		t.Errorf("get should only accept pointers")
 	}
 }
