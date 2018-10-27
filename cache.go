@@ -1,33 +1,37 @@
-package cache // import "github.com/srikrsna/go-cache"
+package cache
 
 import (
+	"context"
 	"errors"
 	"io"
 	"time"
 )
 
-var (
-	// ErrCacheMiss is the error returned by the Cache interface upon a cache miss
-	ErrCacheMiss = errors.New("cache miss")
-)
+// ErrCacheMiss is the returned by the caching backend when a cache for the given key is not found.
+// It should be returned by Get and Renew methods.
+var ErrCacheMiss = errors.New("cache miss")
 
-//go:generate mockgen -destination=mocks/cache_mock.go -package=cache_mock github.com/srikrsna/go-cache Backend
+// Cache provides methods to set, get arbitary data structures.
+// The exact serialization and backend depends on the implementation.
+type Cache interface {
+	// Get retrives an data structure from cache.
+	Get(ctx context.Context, key string, v interface{}, d time.Duration) error
 
-// Backend is the low level cache backend typically, redis, and memcached
-type Backend interface {
-	Get(key string, w io.Writer, d time.Duration) error
-	Set(key string, r []byte, d time.Duration) error
-	Renew(key string, d time.Duration) error
-	Delete(key string) error
+	// Set marshals and saves an arbitary go data structure.
+	Set(ctx context.Context, key string, v interface{}, d time.Duration) error
+
+	// Renew is used to renew a cache
+	Renew(ctx context.Context, key string, d time.Duration) error
+
+	// Evict is used to evict a key from cache.
+	Evict(ctx context.Context, key string) error
 }
 
-//go:generate mockgen -destination=mocks/backend_mock.go -package=cache_mock github.com/srikrsna/go-cache Cache
+// MarhsalUnmarshaler can be used to marhsal un marshal an object
+type MarhsalUnmarshaler interface {
+	// Marshal to marshals a data structure into the given io.Writer
+	Marshal(w io.Writer, v interface{}) error
 
-// Cache is the high level interface that caches go's objects using a defined serialization format
-// Examples: JSON, Protocol Buffers, Message Pack, Bson, Gob
-type Cache interface {
-	Get(key string, v interface{}, d time.Duration) error
-	Set(key string, v interface{}, d time.Duration) error
-	Renew(key string, d time.Duration) error
-	Delete(key string) error
+	// Unmarshal unmarshals the data structure present in r in its encoded form into v. v should be a pointer type.
+	Unmarshal(r io.Reader, v interface{}) error
 }
