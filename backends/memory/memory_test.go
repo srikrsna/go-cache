@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/smartystreets/goconvey/convey"
 	"github.com/srikrsna/go-cache/backends/memory"
 	"github.com/srikrsna/go-cache/testsuite"
 )
@@ -15,10 +16,12 @@ func TestCache(t *testing.T) {
 
 func TestPointerInput(t *testing.T) {
 	c := memory.NewCache()
-	c.Set(context.Background(), "random", 1234, time.Second)
-	if memory.NewCache().Get(context.Background(), "random", 1234, time.Second) != memory.ErrNotPtr {
-		t.Errorf("get should only accept pointers")
-	}
+	Convey("If a value is set", t, func() {
+		So(c.Set(context.Background(), "random", 1234, time.Second), ShouldBeNil)
+		Convey("It should return an error if a pointer is not provided", func() {
+			So(c.Get(context.Background(), "random", 1234, time.Second), ShouldEqual, memory.ErrNotPtr)
+		})
+	})
 }
 
 func BenchmarkCache(b *testing.B) {

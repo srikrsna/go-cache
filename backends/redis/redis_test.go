@@ -8,6 +8,7 @@ import (
 
 	"github.com/srikrsna/go-cache/backends/redis"
 
+	_ "github.com/smartystreets/goconvey/convey"
 	"github.com/srikrsna/go-cache/testsuite"
 
 	rp "github.com/gomodule/redigo/redis"

@@ -32,10 +32,9 @@ func (c *Cache) Get(ctx context.Context, key string, v interface{}, d time.Durat
 		return err
 	}
 
-	conn.Send("EXPIRE", key, int(d.Seconds()))
 	conn.Send("GET", key)
+	conn.Send("EXPIRE", key, int(d.Seconds()))
 	conn.Flush()
-	conn.Receive()
 	data, err := conn.Receive()
 	conn.Close()
 

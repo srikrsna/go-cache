@@ -3,13 +3,11 @@ package testsuite
 import (
 	"context"
 	"encoding/gob"
-	"reflect"
 	"testing"
 	"time"
 
-	"github.com/fortytw2/leaktest"
-
 	"github.com/google/gofuzz"
+	. "github.com/smartystreets/goconvey/convey"
 	"github.com/srikrsna/go-cache"
 )
 
@@ -29,87 +27,102 @@ type Data struct {
 
 // TestCache runs all test cases that Cache should to satify
 func TestCache(t *testing.T, c cache.Cache) {
-	defer leaktest.Check(t)()
-
-	ctx := context.Background()
 
 	fuzzer := fuzz.New()
 
 	var (
-		key   string
-		v, sv Data
+		key  string
+		data Data
+		ctx  context.Context
 	)
 
-	fuzzer.Fuzz(&v)
-	key = "key"
+	ctx = context.Background()
 
-	v.BirthDay = time.Now().UTC()
+	fuzzer.Fuzz(&data)
+	fuzzer.Fuzz(&key)
 
-	if err := c.Set(ctx, key, &v, time.Second); err != nil {
-		t.Fatalf("error while setting object: %v", err)
-	}
+	Convey("Once a data has been added to the cache with a unique key and specific expiration", t, func() {
+		So(c.Set(ctx, key, &data, time.Second), ShouldBeNil)
 
-	if err := c.Get(ctx, key, &sv, time.Second); err != nil {
-		t.Fatalf("error getting data from cache: %v", err)
-	}
+		Convey("It should be retrieved as is with the given unique key under the expiration limit", func() {
+			var sv Data
+			So(c.Get(ctx, key, &sv, time.Second), ShouldBeNil)
+			So(sv, ShouldResemble, data)
+		})
 
-	if !reflect.DeepEqual(v, sv) {
-		t.Errorf("data structure that was set should be the same as the one that is retreived")
-	}
+		Convey("Once the time has expired it should no longer be accessible", func() {
+			time.Sleep(40*time.Millisecond + time.Second)
+			var sv Data
+			So(c.Get(ctx, key, &sv, time.Second), ShouldEqual, cache.ErrCacheMiss)
+		})
 
-	if err := c.Evict(ctx, key); err != nil {
-		t.Fatalf("error evicting cache: %v", err)
-	}
+	})
 
-	if c.Get(ctx, key, &sv, time.Second) != cache.ErrCacheMiss {
-		t.Errorf("get after evict should return ErrCacheMiss")
-	}
+	Convey("Once a data has been added to cache and evicted", t, func() {
+		So(c.Set(ctx, key, &data, time.Second), ShouldBeNil)
+		So(c.Evict(ctx, key), ShouldBeNil)
 
-	if !reflect.DeepEqual(v, sv) {
-		t.Errorf("get returning ErrCacheMiss should not modify passed in v")
-	}
+		Convey("It should no longer be accessible returning a cache miss error", func() {
+			var sv Data
+			og := sv
+			So(c.Get(ctx, key, &sv, time.Second), ShouldEqual, cache.ErrCacheMiss)
+			So(sv, ShouldResemble, og)
+		})
 
-	if err := c.Set(ctx, key, &v, time.Second); err != nil {
-		t.Errorf("error while adding data to cache: %v", err)
-	}
+		Convey("It should no longer be renewable returning a cache miss error", func() {
+			So(c.Renew(ctx, key, time.Second), ShouldEqual, cache.ErrCacheMiss)
+		})
 
-	time.Sleep(50*time.Millisecond + time.Second) // 50 millisecond buffer It should be acceptable
+		Convey("If tried to evict it it should return a cache miss", func() {
+			So(c.Evict(ctx, key), ShouldEqual, cache.ErrCacheMiss)
+		})
+	})
 
-	if c.Get(ctx, key, &sv, time.Second) != cache.ErrCacheMiss {
-		t.Errorf("cache should be expired according to the time provided in set")
-	}
+	Convey("Once a data has been added to cache", t, func() {
+		So(c.Set(ctx, key, &data, time.Second), ShouldBeNil)
+		Convey("If it is reset with new data and new expiry", func() {
+			var nd Data
+			fuzzer.Fuzz(&nd)
+			So(c.Set(ctx, key, &nd, 3*time.Second), ShouldBeNil)
 
-	if err := c.Set(ctx, key, &v, time.Second); err != nil {
-		t.Errorf("error while adding data to cache: %v", err)
-	}
+			Convey("The new value should be returned upon a successful get", func() {
+				var sv Data
+				So(c.Get(ctx, key, &sv, time.Millisecond), ShouldBeNil)
+				So(&sv, ShouldResemble, &nd)
+			})
 
-	if err := c.Set(ctx, key, &v, time.Second); err != nil {
-		t.Errorf("error while setting cache for the same key: %v", err)
-	}
+			Convey("The new expiry should be honoured", func() {
+				time.Sleep(2 * time.Second)
+				var sv Data
+				So(c.Get(ctx, key, &sv, time.Millisecond), ShouldBeNil)
+				So(&sv, ShouldResemble, &nd)
+				time.Sleep(40*time.Millisecond + time.Second)
+				So(c.Get(ctx, key, &sv, time.Second), ShouldEqual, cache.ErrCacheMiss)
+			})
 
-	time.Sleep(100 * time.Millisecond)
+		})
 
-	if err := c.Renew(ctx, key, time.Second); err != nil {
-		t.Errorf("unable to renew cache")
-	}
+	})
 
-	if err := c.Get(ctx, key, &sv, time.Second); err != nil {
-		t.Fatalf("error getting data from cache: %v", err)
-	}
+	Convey("Once a data has been added", t, func() {
+		So(c.Set(ctx, key, &data, time.Second), ShouldBeNil)
+		Convey("If it has been renewed", func() {
+			So(c.Renew(ctx, key, 2*time.Second), ShouldBeNil)
+			Convey("It's expiry should have been updated", func() {
+				time.Sleep(time.Second)
+				var sv Data
+				So(c.Get(ctx, key, &sv, time.Millisecond), ShouldBeNil)
+				time.Sleep(40*time.Millisecond + time.Second)
+				So(c.Get(ctx, key, &sv, time.Second), ShouldEqual, cache.ErrCacheMiss)
+			})
+		})
+	})
 
-	time.Sleep(50*time.Millisecond + time.Second) // 50 millisecond buffer It should be acceptable
+	Convey("Trying to retrieve an unset value should return cache miss", t, func() {
+		var sv Data
+		So(c.Get(ctx, key, &sv, time.Second), ShouldEqual, cache.ErrCacheMiss)
+	})
 
-	if c.Get(ctx, key, &sv, time.Second) != cache.ErrCacheMiss {
-		t.Errorf("cache should be expired according to the time provided in set")
-	}
-
-	if c.Renew(ctx, key, time.Second) != cache.ErrCacheMiss {
-		t.Errorf("renew should return ErrCacheMiss if key is missing")
-	}
-
-	if c.Evict(ctx, key) != cache.ErrCacheMiss {
-		t.Errorf("evict should return ErrCacheMiss if key is missing")
-	}
 }
 
 // BenchmarkCache benchmarks Caches
