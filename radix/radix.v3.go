@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/mediocregopher/radix.v3"
+	"github.com/mediocregopher/radix/v3"
 	cache "github.com/srikrsna/go-cache"
 )
 
